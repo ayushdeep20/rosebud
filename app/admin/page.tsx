@@ -17,6 +17,12 @@ type Subject = {
   code: string;
 };
 
+type SchoolClass = {
+  id: string;
+  name: string;
+  order: number;
+};
+
 export default function AdminDashboard() {
   const [years, setYears] = useState<AcademicYear[]>([]);
   const [label, setLabel] = useState("");
@@ -31,6 +37,12 @@ export default function AdminDashboard() {
   const [subjectError, setSubjectError] = useState("");
   const [subjectLoading, setSubjectLoading] = useState(false);
 
+  const [classes, setClasses] = useState<SchoolClass[]>([]);
+  const [className, setClassName] = useState("");
+  const [classOrder, setClassOrder] = useState("");
+  const [classError, setClassError] = useState("");
+  const [classLoading, setClassLoading] = useState(false);
+
   const loadYears = async () => {
     const res = await fetch("/api/academic-years");
     const data = await res.json();
@@ -43,9 +55,16 @@ export default function AdminDashboard() {
     setSubjects(data);
   };
 
+  const loadClasses = async () => {
+    const res = await fetch("/api/classes");
+    const data = await res.json();
+    setClasses(data);
+  };
+
   useEffect(() => {
     loadYears();
     loadSubjects();
+    loadClasses();
   }, []);
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -95,6 +114,30 @@ export default function AdminDashboard() {
     setSubjectName("");
     setSubjectCode("");
     loadSubjects();
+  };
+
+  const handleCreateClass = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setClassError("");
+    setClassLoading(true);
+
+    const res = await fetch("/api/classes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: className, order: classOrder }),
+    });
+
+    setClassLoading(false);
+
+    if (!res.ok) {
+      const data = await res.json();
+      setClassError(data.error ?? "Something went wrong.");
+      return;
+    }
+
+    setClassName("");
+    setClassOrder("");
+    loadClasses();
   };
 
   return (
@@ -230,6 +273,65 @@ export default function AdminDashboard() {
               >
                 <span>{s.name}</span>
                 <span className="text-gray-500">{s.code}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="bg-white rounded-xl shadow-md p-6 max-w-xl mt-8">
+        <h2 className="text-lg font-medium mb-4">Add Class</h2>
+        <form onSubmit={handleCreateClass} className="space-y-4">
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <label className="block text-sm font-medium mb-1">
+                Name (e.g. Class 8)
+              </label>
+              <input
+                type="text"
+                value={className}
+                onChange={(e) => setClassName(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2"
+                required
+              />
+            </div>
+            <div className="w-32">
+              <label className="block text-sm font-medium mb-1">
+                Order (e.g. 8)
+              </label>
+              <input
+                type="number"
+                value={classOrder}
+                onChange={(e) => setClassOrder(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2"
+                required
+              />
+            </div>
+          </div>
+          {classError && <p className="text-sm text-red-600">{classError}</p>}
+          <button
+            type="submit"
+            disabled={classLoading}
+            className="bg-rose-500 text-white rounded-lg px-4 py-2 font-medium hover:bg-rose-600 disabled:opacity-50"
+          >
+            {classLoading ? "Adding..." : "Add Class"}
+          </button>
+        </form>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-md p-6 max-w-xl mt-8">
+        <h2 className="text-lg font-medium mb-4">Classes</h2>
+        {classes.length === 0 ? (
+          <p className="text-gray-500 text-sm">No classes yet.</p>
+        ) : (
+          <ul className="space-y-2">
+            {classes.map((c) => (
+              <li
+                key={c.id}
+                className="flex justify-between border-b pb-2 text-sm"
+              >
+                <span>{c.name}</span>
+                <span className="text-gray-500">Order: {c.order}</span>
               </li>
             ))}
           </ul>
