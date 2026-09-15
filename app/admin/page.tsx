@@ -11,6 +11,12 @@ type AcademicYear = {
   isCurrent: boolean;
 };
 
+type Subject = {
+  id: string;
+  name: string;
+  code: string;
+};
+
 export default function AdminDashboard() {
   const [years, setYears] = useState<AcademicYear[]>([]);
   const [label, setLabel] = useState("");
@@ -19,14 +25,27 @@ export default function AdminDashboard() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [subjectName, setSubjectName] = useState("");
+  const [subjectCode, setSubjectCode] = useState("");
+  const [subjectError, setSubjectError] = useState("");
+  const [subjectLoading, setSubjectLoading] = useState(false);
+
   const loadYears = async () => {
     const res = await fetch("/api/academic-years");
     const data = await res.json();
     setYears(data);
   };
 
+  const loadSubjects = async () => {
+    const res = await fetch("/api/subjects");
+    const data = await res.json();
+    setSubjects(data);
+  };
+
   useEffect(() => {
     loadYears();
+    loadSubjects();
   }, []);
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -52,6 +71,30 @@ export default function AdminDashboard() {
     setStartDate("");
     setEndDate("");
     loadYears();
+  };
+
+  const handleCreateSubject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubjectError("");
+    setSubjectLoading(true);
+
+    const res = await fetch("/api/subjects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: subjectName, code: subjectCode }),
+    });
+
+    setSubjectLoading(false);
+
+    if (!res.ok) {
+      const data = await res.json();
+      setSubjectError(data.error ?? "Something went wrong.");
+      return;
+    }
+
+    setSubjectName("");
+    setSubjectCode("");
+    loadSubjects();
   };
 
   return (
@@ -126,6 +169,67 @@ export default function AdminDashboard() {
                   {new Date(y.startDate).toLocaleDateString()} –{" "}
                   {new Date(y.endDate).toLocaleDateString()}
                 </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="bg-white rounded-xl shadow-md p-6 max-w-xl mt-8">
+        <h2 className="text-lg font-medium mb-4">Add Subject</h2>
+        <form onSubmit={handleCreateSubject} className="space-y-4">
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <label className="block text-sm font-medium mb-1">
+                Name (e.g. Mathematics)
+              </label>
+              <input
+                type="text"
+                value={subjectName}
+                onChange={(e) => setSubjectName(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2"
+                required
+              />
+            </div>
+            <div className="w-32">
+              <label className="block text-sm font-medium mb-1">
+                Code (e.g. MATH)
+              </label>
+              <input
+                type="text"
+                value={subjectCode}
+                onChange={(e) => setSubjectCode(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2"
+                required
+              />
+            </div>
+          </div>
+          {subjectError && (
+            <p className="text-sm text-red-600">{subjectError}</p>
+          )}
+          <button
+            type="submit"
+            disabled={subjectLoading}
+            className="bg-rose-500 text-white rounded-lg px-4 py-2 font-medium hover:bg-rose-600 disabled:opacity-50"
+          >
+            {subjectLoading ? "Adding..." : "Add Subject"}
+          </button>
+        </form>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-md p-6 max-w-xl mt-8">
+        <h2 className="text-lg font-medium mb-4">Subjects</h2>
+        {subjects.length === 0 ? (
+          <p className="text-gray-500 text-sm">No subjects yet.</p>
+        ) : (
+          <ul className="space-y-2">
+            {subjects.map((s) => (
+              <li
+                key={s.id}
+                className="flex justify-between border-b pb-2 text-sm"
+              >
+                <span>{s.name}</span>
+                <span className="text-gray-500">{s.code}</span>
               </li>
             ))}
           </ul>
