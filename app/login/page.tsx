@@ -23,14 +23,24 @@ export default function LoginPage() {
       redirect: false,
     });
 
-    setLoading(false);
-
     if (result?.error) {
+      setLoading(false);
       setError("Invalid username or password.");
       return;
     }
 
-    router.push("/dashboard");
+    const res = await fetch("/api/whoami");
+    const data = await res.json();
+
+    setLoading(false);
+
+    if (data.role === "ADMIN") {
+      router.push("/admin");
+    } else if (data.role === "TEACHER") {
+      router.push("/teacher");
+    } else {
+      router.push("/student");
+    }
     router.refresh();
   };
 
@@ -65,9 +75,7 @@ export default function LoginPage() {
               required
             />
           </div>
-          {error && (
-            <p className="text-sm text-red-600">{error}</p>
-          )}
+          {error && <p className="text-sm text-red-600">{error}</p>}
           <button
             type="submit"
             disabled={loading}
