@@ -1,0 +1,148 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  TEACHER
+  STUDENT
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  role         Role
+  mustChangePassword Boolean @default(true)
+  createdAt    DateTime @default(now())
+
+  student Student?
+  teacher Teacher?
+}
+
+model AcademicYear {
+  id        String   @id @default(cuid())
+  label     String   @unique // e.g. "2026-27"
+  startDate DateTime
+  endDate   DateTime
+  isCurrent Boolean  @default(false)
+
+  enrollments        Enrollment[]
+  teacherAssignments TeacherAssignment[]
+}
+
+model SchoolClass {
+  id    String @id @default(cuid())
+  name  String @unique // e.g. "Class 8"
+  order Int    @unique // 1, 2, 3... for sorting
+
+  sections Section[]
+}
+
+model Section {
+  id      String @id @default(cuid())
+  name    String // e.g. "A"
+
+  schoolClass   SchoolClass @relation(fields: [schoolClassId], references: [id])
+  schoolClassId String
+
+  enrollments        Enrollment[]
+  teacherAssignments TeacherAssignment[]
+
+  @@unique([schoolClassId, name]) // no two "8-A" sections under the same class
+}
+
+model Subject {
+  id   String @id @default(cuid())
+  name String @unique // e.g. "Mathematics"
+  code String @unique // e.g. "MATH"
+
+  teacherAssignments TeacherAssignment[]
+}
+
+model Student {
+  id           String   @id @default(cuid())
+  studentCode  String   @unique // permanent ID, e.g. "RBS-2026-0001"
+  firstName    String
+  lastName     String
+  dateOfBirth  DateTime
+  photoUrl     String?
+
+  fatherName   String?
+  fatherPhone  String?
+  motherName   String?
+  motherPhone  String?
+  guardianName String?
+  guardianPhone String?
+
+  user   User   @relation(fields: [userId], references: [id])
+  userId String @unique
+
+  enrollments Enrollment[]
+
+  createdAt DateTime @default(now())
+}
+
+// Records which Section a Student was in, during which Academic Year.
+// This is what lets a student move between sections/classes each year
+// while keeping every year's history intact.
+model Enrollment {
+  id String @id @default(cuid())
+
+  student   Student @relation(fields: [studentId], references: [id])
+  studentId String
+
+  section   Section @relation(fields: [sectionId], references: [id])
+  sectionId String
+
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  academicYearId String
+
+  rollNumber Int?
+
+  @@unique([studentId, academicYearId]) // a student has only ONE section per year
+}
+
+model Teacher {
+  id        String  @id @default(cuid())
+  firstName String
+  lastName  String
+  phone     String?
+
+  user   User   @relation(fields: [userId], references: [id])
+  userId String @unique
+
+  assignments TeacherAssignment[]
+
+  createdAt DateTime @default(now())
+}
+
+// Records which Subject a Teacher teaches, in which Section, in which year.
+// Every permission check later ("can this teacher touch this class's data?")
+// comes down to querying this table.
+model TeacherAssignment {
+  id String @id @default(cuid())
+
+  teacher   Teacher @relation(fields: [teacherId], references: [id])
+  teacherId String
+
+  subject   Subject @relation(fields: [subjectId], references: [id])
+  subjectId String
+
+  section   Section @relation(fields: [sectionId], references: [id])
+  sectionId String
+
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  academicYearId String
+
+  isClassTeacher Boolean @default(false) // extra permissions if true
+
+  @@unique([teacherId, subjectId, sectionId, academicYearId])
+}
