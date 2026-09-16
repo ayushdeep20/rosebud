@@ -23,6 +23,13 @@ type SchoolClass = {
   order: number;
 };
 
+type Section = {
+  id: string;
+  name: string;
+  schoolClassId: string;
+  schoolClass: SchoolClass;
+};
+
 export default function AdminDashboard() {
   const [years, setYears] = useState<AcademicYear[]>([]);
   const [label, setLabel] = useState("");
@@ -43,6 +50,12 @@ export default function AdminDashboard() {
   const [classError, setClassError] = useState("");
   const [classLoading, setClassLoading] = useState(false);
 
+  const [sections, setSections] = useState<Section[]>([]);
+  const [sectionName, setSectionName] = useState("");
+  const [sectionClassId, setSectionClassId] = useState("");
+  const [sectionError, setSectionError] = useState("");
+  const [sectionLoading, setSectionLoading] = useState(false);
+
   const loadYears = async () => {
     const res = await fetch("/api/academic-years");
     const data = await res.json();
@@ -61,10 +74,17 @@ export default function AdminDashboard() {
     setClasses(data);
   };
 
+  const loadSections = async () => {
+    const res = await fetch("/api/sections");
+    const data = await res.json();
+    setSections(data);
+  };
+
   useEffect(() => {
     loadYears();
     loadSubjects();
     loadClasses();
+    loadSections();
   }, []);
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -138,6 +158,32 @@ export default function AdminDashboard() {
     setClassName("");
     setClassOrder("");
     loadClasses();
+  };
+
+  const handleCreateSection = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSectionError("");
+    setSectionLoading(true);
+
+    const res = await fetch("/api/sections", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: sectionName,
+        schoolClassId: sectionClassId,
+      }),
+    });
+
+    setSectionLoading(false);
+
+    if (!res.ok) {
+      const data = await res.json();
+      setSectionError(data.error ?? "Something went wrong.");
+      return;
+    }
+
+    setSectionName("");
+    loadSections();
   };
 
   return (
@@ -332,6 +378,69 @@ export default function AdminDashboard() {
               >
                 <span>{c.name}</span>
                 <span className="text-gray-500">Order: {c.order}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="bg-white rounded-xl shadow-md p-6 max-w-xl mt-8">
+        <h2 className="text-lg font-medium mb-4">Add Section</h2>
+        <form onSubmit={handleCreateSection} className="space-y-4">
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <label className="block text-sm font-medium mb-1">
+                Class
+              </label>
+              <select
+                value={sectionClassId}
+                onChange={(e) => setSectionClassId(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2"
+                required
+              >
+                <option value="">Select a class</option>
+                {classes.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="w-32">
+              <label className="block text-sm font-medium mb-1">
+                Section (e.g. A)
+              </label>
+              <input
+                type="text"
+                value={sectionName}
+                onChange={(e) => setSectionName(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2"
+                required
+              />
+            </div>
+          </div>
+          {sectionError && (
+            <p className="text-sm text-red-600">{sectionError}</p>
+          )}
+          <button
+            type="submit"
+            disabled={sectionLoading}
+            className="bg-rose-500 text-white rounded-lg px-4 py-2 font-medium hover:bg-rose-600 disabled:opacity-50"
+          >
+            {sectionLoading ? "Adding..." : "Add Section"}
+          </button>
+        </form>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-md p-6 max-w-xl mt-8">
+        <h2 className="text-lg font-medium mb-4">Sections</h2>
+        {sections.length === 0 ? (
+          <p className="text-gray-500 text-sm">No sections yet.</p>
+        ) : (
+          <ul className="space-y-2">
+            {sections.map((s) => (
+              <li key={s.id} className="border-b pb-2 text-sm">
+                {s.schoolClass.name} — Section {s.name}
               </li>
             ))}
           </ul>
