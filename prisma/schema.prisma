@@ -29,7 +29,7 @@ model User {
 
 model AcademicYear {
   id        String   @id @default(cuid())
-  label     String   @unique // e.g. "2026-27"
+  label     String   @unique
   startDate DateTime
   endDate   DateTime
   isCurrent Boolean  @default(false)
@@ -40,15 +40,15 @@ model AcademicYear {
 
 model SchoolClass {
   id    String @id @default(cuid())
-  name  String @unique // e.g. "Class 8"
-  order Int    @unique // 1, 2, 3... for sorting
+  name  String @unique
+  order Int    @unique
 
   sections Section[]
 }
 
 model Section {
   id      String @id @default(cuid())
-  name    String // e.g. "A"
+  name    String
 
   schoolClass   SchoolClass @relation(fields: [schoolClassId], references: [id])
   schoolClassId String
@@ -56,24 +56,27 @@ model Section {
   enrollments        Enrollment[]
   teacherAssignments TeacherAssignment[]
 
-  @@unique([schoolClassId, name]) // no two "8-A" sections under the same class
+  @@unique([schoolClassId, name])
 }
 
 model Subject {
   id   String @id @default(cuid())
-  name String @unique // e.g. "Mathematics"
-  code String @unique // e.g. "MATH"
+  name String @unique
+  code String @unique
 
   teacherAssignments TeacherAssignment[]
 }
 
 model Student {
   id           String   @id @default(cuid())
-  studentCode  String   @unique // permanent ID, e.g. "RBS-2026-0001"
+  studentCode  String   @unique
+  admissionNumber String @unique
+
   firstName    String
   lastName     String
   dateOfBirth  DateTime
   photoUrl     String?
+  gender       String?
 
   fatherName   String?
   fatherPhone  String?
@@ -81,6 +84,29 @@ model Student {
   motherPhone  String?
   guardianName String?
   guardianPhone String?
+
+  bloodGroup   String?
+  category     String?
+  religion     String?
+  address      String?
+  district     String?
+
+  hostelFacility Boolean @default(false)
+  busFacility    Boolean @default(false)
+  busNo          String?
+  busPoint       String?
+
+  height       Float?
+  weight       Float?
+
+  regNo                 String?
+  fathersQualification  String?
+  fathersOccupation     String?
+  previousSchool        String?
+  remarks               String?
+  apaarId               String?
+  penNo                 String?
+  aadhaarEncrypted      String?
 
   user   User   @relation(fields: [userId], references: [id])
   userId String @unique
@@ -90,9 +116,6 @@ model Student {
   createdAt DateTime @default(now())
 }
 
-// Records which Section a Student was in, during which Academic Year.
-// This is what lets a student move between sections/classes each year
-// while keeping every year's history intact.
 model Enrollment {
   id String @id @default(cuid())
 
@@ -107,7 +130,7 @@ model Enrollment {
 
   rollNumber Int?
 
-  @@unique([studentId, academicYearId]) // a student has only ONE section per year
+  @@unique([studentId, academicYearId])
 }
 
 model Teacher {
@@ -124,9 +147,6 @@ model Teacher {
   createdAt DateTime @default(now())
 }
 
-// Records which Subject a Teacher teaches, in which Section, in which year.
-// Every permission check later ("can this teacher touch this class's data?")
-// comes down to querying this table.
 model TeacherAssignment {
   id String @id @default(cuid())
 
@@ -142,7 +162,16 @@ model TeacherAssignment {
   academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
   academicYearId String
 
-  isClassTeacher Boolean @default(false) // extra permissions if true
+  isClassTeacher Boolean @default(false)
 
   @@unique([teacherId, subjectId, sectionId, academicYearId])
+}
+
+// Powers safe, concurrency-proof Student ID generation (e.g. RBS-2026-0001).
+// A single row per year is atomically incremented, so two admins creating
+// students at the same moment can never receive the same number.
+model IdCounter {
+  id    String @id @default(cuid())
+  key   String @unique
+  value Int    @default(0)
 }
