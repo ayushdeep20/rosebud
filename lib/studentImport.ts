@@ -18,6 +18,7 @@ export type ImportRow = {
   className?: string;
   sectionName?: string;
   rollNumber?: string;
+  aadhaarNumber?: string;
 };
 
 export type ValidatedRow = {
@@ -45,6 +46,7 @@ export function parseSpreadsheet(buffer: ArrayBuffer): ImportRow[] {
     className: String(row.className ?? "").trim(),
     sectionName: String(row.sectionName ?? "").trim(),
     rollNumber: String(row.rollNumber ?? "").trim(),
+    aadhaarNumber: String(row.aadhaarNumber ?? "").trim(),
   }));
 }
 

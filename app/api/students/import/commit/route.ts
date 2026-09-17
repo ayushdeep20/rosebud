@@ -2,8 +2,9 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import bcrypt from "bcryptjs";
-import { generateStudentId } from "@/lib/studentId";
+import { requireAdmin } from "@/lib/permissions";
+import { createStudentInTx } from "@/lib/students/service";
+import { recordAudit } from "@/lib/audit";
 import type { ImportRow } from "@/lib/studentImport";
 
 type CommitRow = {
@@ -14,15 +15,13 @@ type CommitRow = {
 
 export async function POST(request: Request) {
   const session = await auth();
-  if (session?.user?.role !== "ADMIN") {
+  if (!requireAdmin(session)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  const actorUserId = session!.user!.id;
 
   const body = await request.json();
-  const { academicYearId, rows } = body as {
-    academicYearId: string;
-    rows: CommitRow[];
-  };
+  const { academicYearId, rows } = body as { academicYearId: string; rows: CommitRow[] };
 
   if (!academicYearId || !Array.isArray(rows) || rows.length === 0) {
     return NextResponse.json(
@@ -31,14 +30,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const academicYear = await prisma.academicYear.findUnique({
-    where: { id: academicYearId },
-  });
+  const academicYear = await prisma.academicYear.findUnique({ where: { id: academicYearId } });
   if (!academicYear) {
-    return NextResponse.json(
-      { error: "Academic year not found" },
-      { status: 404 }
-    );
+    return NextResponse.json({ error: "Academic year not found" }, { status: 404 });
   }
 
   const results: {
@@ -50,68 +44,43 @@ export async function POST(request: Request) {
     error?: string;
   }[] = [];
 
-  // Each row gets its own transaction, so one bad row can never
-  // roll back students that were already successfully created.
   for (const row of rows) {
     try {
       const result = await prisma.$transaction(async (tx) => {
-        const studentCode = await generateStudentId(tx, academicYear.label);
-        const username = studentCode.replace(/-/g, "").toLowerCase();
-        const tempPassword = `${row.data.lastName}@${row.data.admissionNumber}`.slice(
-          0,
-          20
-        );
-        const passwordHash = await bcrypt.hash(tempPassword, 10);
-
-        const user = await tx.user.create({
-          data: {
-            username,
-            passwordHash,
-            role: "STUDENT",
-            mustChangePassword: true,
-          },
-        });
-
-        const student = await tx.student.create({
-          data: {
-            studentCode,
-            admissionNumber: row.data.admissionNumber!,
+        const created = await createStudentInTx(
+          tx,
+          {
             firstName: row.data.firstName!,
             lastName: row.data.lastName!,
-            dateOfBirth: new Date(row.data.dateOfBirth!),
-            gender: row.data.gender || null,
-            userId: user.id,
-          },
-        });
-
-        await tx.enrollment.create({
-          data: {
-            studentId: student.id,
-            sectionId: row.sectionId,
+            dateOfBirth: row.data.dateOfBirth!,
+            admissionNumber: row.data.admissionNumber!,
+            gender: row.data.gender,
             academicYearId,
-            rollNumber: row.data.rollNumber
-              ? Number(row.data.rollNumber)
-              : null,
+            sectionId: row.sectionId,
+            rollNumber: row.data.rollNumber,
+            aadhaarNumber: row.data.aadhaarNumber,
           },
+          academicYear.label
+        );
+
+        await recordAudit(tx, {
+          actorUserId,
+          action: "STUDENT_IMPORT",
+          entityType: "Student",
+          entityId: created.studentId,
+          after: { studentCode: created.studentCode, admissionNumber: row.data.admissionNumber },
         });
 
-        return { studentCode, username, tempPassword };
+        return created;
       });
 
-      results.push({
-        rowNumber: row.rowNumber,
-        status: "created",
-        ...result,
-      });
+      results.push({ rowNumber: row.rowNumber, status: "created", ...result });
     } catch (err: unknown) {
       const code = (err as { code?: string })?.code;
       results.push({
         rowNumber: row.rowNumber,
         status: "failed",
-        error:
-          code === "P2002"
-            ? "Duplicate admission number"
-            : "Failed to create this student",
+        error: code === "P2002" ? "Duplicate admission number" : "Failed to create this student",
       });
     }
   }
