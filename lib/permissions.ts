@@ -1,7 +1,7 @@
 // lib/permissions.ts
 import type { Session } from "next-auth";
 
-type Role = "ADMIN" | "TEACHER" | "STUDENT";
+type Role = "ADMIN" | "TEACHER" | "STUDENT" | "STAFF";
 
 export function requireAdmin(session: Session | null): boolean {
   return session?.user?.role === "ADMIN";
