@@ -11,6 +11,7 @@ const links = [
   { href: "/admin/students/reset-passwords", label: "Reset Passwords", desc: "Recover student credentials" },
   { href: "/admin/staff", label: "Staff", desc: "Manage teachers and staff" },
   { href: "/admin/assignments", label: "Assignments", desc: "Assign teachers to classes and subjects" },
+  { href: "/admin/credentials", label: "Credentials", desc: "Manage staff portal passwords" },
 ];
 
 export default function AdminDashboard() {
