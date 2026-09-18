@@ -13,6 +13,7 @@ enum Role {
   ADMIN
   TEACHER
   STUDENT
+  STAFF
 }
 
 model User {
@@ -25,6 +26,7 @@ model User {
 
   student Student?
   teacher Teacher?
+  staff   Staff?
 }
 
 model AcademicYear {
@@ -167,6 +169,23 @@ model TeacherAssignment {
   @@unique([teacherId, subjectId, sectionId, academicYearId])
 }
 
+model Staff {
+  id            String    @id @default(cuid())
+  staffCode     String    @unique
+  firstName     String
+  lastName      String
+  designation   String
+  phone         String?
+  email         String?
+  dateOfJoining DateTime?
+  isActive      Boolean   @default(true)
+
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
 // Powers safe, concurrency-proof Student ID generation (e.g. RBS-2026-0001).
 // A single row per year is atomically incremented, so two admins creating
 // students at the same moment can never receive the same number.
@@ -175,6 +194,7 @@ model IdCounter {
   key   String @unique
   value Int    @default(0)
 }
+
 model AuditLog {
   id          String   @id @default(cuid())
   actorUserId String
