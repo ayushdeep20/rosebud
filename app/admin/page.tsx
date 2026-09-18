@@ -10,6 +10,7 @@ const links = [
   { href: "/admin/students/import", label: "Bulk Import", desc: "Import students from Excel" },
   { href: "/admin/students/reset-passwords", label: "Reset Passwords", desc: "Recover student credentials" },
   { href: "/admin/staff", label: "Staff", desc: "Manage teachers and staff" },
+  { href: "/admin/assignments", label: "Assignments", desc: "Assign teachers to classes and subjects" },
 ];
 
 export default function AdminDashboard() {
