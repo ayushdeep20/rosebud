@@ -68,14 +68,7 @@ export default function ImportOpeningBalancesPage() {
         throw new Error("No valid records found. Make sure format is AdmissionNumber, Dues per line.");
       }
 
-      const res = await fetch("/api/payments", { // or your import endpoint
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        // If you used the route from the previous step, point this to /api/fees/import-opening
-      });
-      
-      // Let's use the explicit route we created:
-      const importRes = await fetch("/api/fees/import-opening", {
+            const importRes = await fetch("/api/fees/import-openings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ academicYearId, records }),
