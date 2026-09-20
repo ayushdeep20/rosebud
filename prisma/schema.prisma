@@ -29,7 +29,7 @@ model User {
   staff   Staff?
 
   markedAttendance Attendance[]
-  
+
   createdExams     Exam[]
 }
 
@@ -44,9 +44,9 @@ model AcademicYear {
   teacherAssignments TeacherAssignment[]
   attendance         Attendance[]
   exams              Exam[]
-  // Add inside model AcademicYear
-feeDues  FeeDue[]
-payments Payment[]
+  feeDues       FeeDue[]
+  payments      Payment[]
+  feeStructures FeeStructure[]
 }
 
 model SchoolClass {
@@ -55,6 +55,7 @@ model SchoolClass {
   order Int    @unique
 
   sections Section[]
+  feeStructures FeeStructure[]
 }
 
 model Section {
@@ -129,9 +130,8 @@ model Student {
   enrollments Enrollment[]
   attendance  Attendance[]
   subjectMarks SubjectMark[]
-  // Add inside model Student
-feeDues  FeeDue[]
-payments Payment[]
+  feeDues  FeeDue[]
+  payments Payment[]
 
   createdAt DateTime @default(now())
 }
@@ -149,6 +149,7 @@ model Enrollment {
   academicYearId String
 
   rollNumber Int?
+  isNewAdmission Boolean @default(false)
 
   @@unique([studentId, academicYearId])
 }
@@ -306,7 +307,7 @@ model SubjectMark {
   marksObtained Float?
   theoryMarks   Float?
   iaMarks       Float?
-  isAbsent      Boolean @default(false)   // ADD THIS LINE
+  isAbsent      Boolean @default(false)
 
   createdAt DateTime @default(now())
 
@@ -317,6 +318,9 @@ enum FeeType {
   TUITION
   HOSTEL
   TRANSPORT
+  ADMISSION
+  ANNUAL
+  PREVIOUS_DUES
   OTHER
 }
 
@@ -335,44 +339,80 @@ enum PaymentMethod {
 
 model FeeDue {
   id             String       @id @default(cuid())
-  
+
   student        Student      @relation(fields: [studentId], references: [id])
   studentId      String
-  
+
   academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
   academicYearId String
-  
+
   feeType        FeeType
-  month          Int          // e.g., 1 for Jan, 4 for April
-  year           Int          // e.g., 2026
-  
+  month          Int
+  year           Int
+  description    String       @default("")
+
   amountDue      Float
   amountPaid     Float        @default(0)
   status         FeeStatus    @default(PENDING)
   dueDate        DateTime?
 
+  allocations    PaymentAllocation[]
+
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
-  // This ensures we never accidentally generate duplicate fees for the same month/type
   @@unique([studentId, academicYearId, feeType, month, year])
   @@index([studentId, status])
 }
 
 model Payment {
   id             String        @id @default(cuid())
-  
+  receiptNo      String?       @unique
+
   student        Student       @relation(fields: [studentId], references: [id])
   studentId      String
-  
+
   academicYear   AcademicYear  @relation(fields: [academicYearId], references: [id])
   academicYearId String
-  
+
   amount         Float
   paymentDate    DateTime      @default(now())
   paymentMethod  PaymentMethod @default(CASH)
-  referenceId    String?       // To store UPI Transaction IDs or Cheque numbers
+  referenceId    String?
   remarks        String?
 
+  allocations    PaymentAllocation[]
+
   createdAt      DateTime      @default(now())
+}
+
+model FeeStructure {
+  id String @id @default(cuid())
+
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  academicYearId String
+
+  schoolClass   SchoolClass @relation(fields: [schoolClassId], references: [id])
+  schoolClassId String
+
+  isBoarder Boolean
+  feeType   FeeType
+  amount    Float
+
+  @@unique([academicYearId, schoolClassId, isBoarder, feeType])
+}
+
+model PaymentAllocation {
+  id String @id @default(cuid())
+
+  payment   Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  paymentId String
+
+  feeDue   FeeDue @relation(fields: [feeDueId], references: [id])
+  feeDueId String
+
+  amount Float
+
+  @@index([paymentId])
+  @@index([feeDueId])
 }

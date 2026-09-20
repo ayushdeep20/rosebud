@@ -4,9 +4,10 @@ import { useState, useEffect } from "react";
 
 type FeeDue = {
   id: string;
-  feeType: "TUITION" | "HOSTEL" | "TRANSPORT" | "OTHER";
+  feeType: "ADMISSION" | "ANNUAL" | "TUITION" | "TRANSPORT" | "MESS" | "PREVIOUS_DUES" | "OTHER";
   month: number;
   year: number;
+  description: string;
   amountDue: number;
   amountPaid: number;
   status: "PENDING" | "PARTIAL" | "PAID";
@@ -21,6 +22,7 @@ type Payment = {
 };
 
 type FeeStatement = {
+  academicYearId: string;
   summary: {
     totalExpected: number;
     totalPaid: number;
@@ -30,19 +32,25 @@ type FeeStatement = {
   payments: Payment[];
 };
 
+const FEE_TYPE_LABELS: Record<FeeDue["feeType"], string> = {
+  ADMISSION: "Admission Fee",
+  ANNUAL: "Annual Fee",
+  TUITION: "Tuition",
+  TRANSPORT: "Transport",
+  MESS: "Mess (Hostel)",
+  PREVIOUS_DUES: "Previous Dues",
+  OTHER: "Other",
+};
+
 export default function StudentFeePortalPage() {
   const [statement, setStatement] = useState<FeeStatement | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Replace these with your actual logged-in user context/state IDs
-  const studentId = "cm19_dummy_student_id"; 
-  const academicYearId = "cm19_dummy_year_id";
-
   useEffect(() => {
     async function fetchStatement() {
       try {
-        const res = await fetch(`/api/student/fees?studentId=${studentId}&academicYearId=${academicYearId}`);
+        const res = await fetch("/api/student/fees");
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to load fee statement.");
         setStatement(data);
@@ -54,12 +62,11 @@ export default function StudentFeePortalPage() {
     }
 
     void fetchStatement();
-  }, [studentId, academicYearId]);
+  }, []);
 
-  // Helper to turn month number (1-12) into a readable name
   const getMonthName = (monthNum: number) => {
     const date = new Date(2026, monthNum - 1, 1);
-    return date.toLocaleString('default', { month: 'long' });
+    return date.toLocaleString("default", { month: "long" });
   };
 
   if (loading) return <div className="p-8 text-center text-gray-500">Loading your fee ledger...</div>;
@@ -69,9 +76,8 @@ export default function StudentFeePortalPage() {
   return (
     <div className="min-h-screen bg-gray-50 p-8 max-w-5xl mx-auto">
       <h1 className="mb-2 text-2xl font-bold text-gray-800">Fee Statement & Ledger</h1>
-      <p className="mb-6 text-sm text-gray-500">View your itemized monthly dues and payment receipts.</p>
+      <p className="mb-6 text-sm text-gray-500">View your itemized dues and payment receipts.</p>
 
-      {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
           <p className="text-sm font-medium text-gray-500">Total Billed</p>
@@ -89,10 +95,9 @@ export default function StudentFeePortalPage() {
         </div>
       </div>
 
-      {/* Monthly Breakdown Table */}
       <div className="rounded-xl bg-white shadow-sm overflow-hidden mb-8">
         <div className="px-6 py-4 border-b bg-gray-50">
-          <h2 className="font-semibold text-gray-800">Monthly Dues Breakdown</h2>
+          <h2 className="font-semibold text-gray-800">Fee Breakdown</h2>
         </div>
         <table className="w-full text-left text-sm">
           <thead className="bg-gray-100 text-gray-600">
@@ -117,7 +122,8 @@ export default function StudentFeePortalPage() {
                     </td>
                     <td className="px-6 py-4">
                       <span className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
-                        {due.feeType}
+                        {FEE_TYPE_LABELS[due.feeType]}
+                        {due.feeType === "OTHER" && due.description ? ` — ${due.description}` : ""}
                       </span>
                     </td>
                     <td className="px-6 py-4">₹{due.amountDue}</td>
@@ -141,7 +147,6 @@ export default function StudentFeePortalPage() {
         </table>
       </div>
 
-      {/* Payment History Section */}
       <div className="rounded-xl bg-white shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b bg-gray-50">
           <h2 className="font-semibold text-gray-800">Payment History & Receipts</h2>

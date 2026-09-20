@@ -1,36 +1,47 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
+  const session = await auth();
+
+  if (session?.user?.role !== "STUDENT") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   try {
-    // In your authentication setup, you likely extract the logged-in user/student ID from headers, session, or query params.
-    // For this example, we'll accept `studentId` as a search parameter.
-    const url = new URL(req.url);
-    const studentId = url.searchParams.get("studentId");
-    const academicYearId = url.searchParams.get("academicYearId");
-
-    if (!studentId || !academicYearId) {
-      return NextResponse.json({ error: "Missing studentId or academicYearId" }, { status: 400 });
-    }
-
-    // 1. Fetch all fee dues for this student
-    const feeDues = await prisma.feeDue.findMany({
-      where: { studentId, academicYearId },
-      orderBy: [
-        { year: "asc" },
-        { month: "asc" },
-      ],
+    const student = await prisma.student.findUnique({
+      where: { userId: session.user.id },
     });
 
-    // 2. Fetch payment history receipts
+    if (!student) {
+      return NextResponse.json({ error: "Student profile not found" }, { status: 404 });
+    }
+
+    const url = new URL(req.url);
+    let academicYearId = url.searchParams.get("academicYearId");
+
+    if (!academicYearId) {
+      const currentYear = await prisma.academicYear.findFirst({
+        where: { isCurrent: true },
+      });
+      academicYearId = currentYear?.id ?? null;
+    }
+
+    if (!academicYearId) {
+      return NextResponse.json({ error: "No current academic year is set" }, { status: 400 });
+    }
+
+    const feeDues = await prisma.feeDue.findMany({
+      where: { studentId: student.id, academicYearId },
+      orderBy: [{ year: "asc" }, { month: "asc" }],
+    });
+
     const payments = await prisma.payment.findMany({
-      where: { studentId, academicYearId },
+      where: { studentId: student.id, academicYearId },
       orderBy: { paymentDate: "desc" },
     });
 
-    // 3. Calculate summary metrics
     let totalExpected = 0;
     let totalPaid = 0;
 
@@ -42,11 +53,8 @@ export async function GET(req: NextRequest) {
     const totalPending = totalExpected - totalPaid;
 
     return NextResponse.json({
-      summary: {
-        totalExpected,
-        totalPaid,
-        totalPending,
-      },
+      academicYearId,
+      summary: { totalExpected, totalPaid, totalPending },
       feeDues,
       payments,
     });

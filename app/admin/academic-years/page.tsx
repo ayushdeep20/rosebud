@@ -13,6 +13,7 @@ export default function AcademicYearsPage() {
   const [endDate, setEndDate] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [settingCurrentId, setSettingCurrentId] = useState<string | null>(null);
 
   const loadYears = async () => {
     const res = await fetch("/api/academic-years");
@@ -42,6 +43,23 @@ export default function AcademicYearsPage() {
 
     setLabel(""); setStartDate(""); setEndDate("");
     loadYears();
+  };
+
+  const handleSetCurrent = async (id: string) => {
+    setSettingCurrentId(id);
+    try {
+      const res = await fetch(`/api/academic-years/${id}/set-current`, {
+        method: "PATCH",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error ?? "Failed to set current year.");
+        return;
+      }
+      loadYears();
+    } finally {
+      setSettingCurrentId(null);
+    }
   };
 
   return (
@@ -81,11 +99,29 @@ export default function AcademicYearsPage() {
         ) : (
           <ul className="space-y-2">
             {years.map((y) => (
-              <li key={y.id} className="flex justify-between border-b pb-2 text-sm">
-                <span>{y.label}</span>
-                <span className="text-gray-500">
-                  {new Date(y.startDate).toLocaleDateString()} – {new Date(y.endDate).toLocaleDateString()}
-                </span>
+              <li key={y.id} className="flex items-center justify-between border-b pb-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <span>{y.label}</span>
+                  {y.isCurrent && (
+                    <span className="text-xs bg-green-100 text-green-700 rounded px-2 py-0.5 font-medium">
+                      Current
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-gray-500">
+                    {new Date(y.startDate).toLocaleDateString()} – {new Date(y.endDate).toLocaleDateString()}
+                  </span>
+                  {!y.isCurrent && (
+                    <button
+                      onClick={() => handleSetCurrent(y.id)}
+                      disabled={settingCurrentId === y.id}
+                      className="text-xs border rounded px-2 py-1 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      {settingCurrentId === y.id ? "Setting..." : "Set as Current"}
+                    </button>
+                  )}
+                </div>
               </li>
             ))}
           </ul>
