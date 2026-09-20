@@ -101,14 +101,16 @@ export async function POST(
               subjectId: exam.subjectId!,
             },
           },
-          update: {
+                    update: {
             marksObtained: row.marks,
+            isAbsent: row.isAbsent ?? false,
           },
           create: {
             examId: exam.id,
             studentId: row.studentId!,
             subjectId: exam.subjectId!,
             marksObtained: row.marks,
+            isAbsent: row.isAbsent ?? false,
           },
         })
       )

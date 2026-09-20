@@ -306,6 +306,7 @@ model SubjectMark {
   marksObtained Float?
   theoryMarks   Float?
   iaMarks       Float?
+  isAbsent      Boolean @default(false)   // ADD THIS LINE
 
   createdAt DateTime @default(now())
 

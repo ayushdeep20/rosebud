@@ -11,6 +11,7 @@ export type ValidatedMarksRow = {
   rowNumber: number;
   rollNumber: number | null;
   marks: number | null;
+  isAbsent?: boolean;
   status: "valid" | "invalid";
   reason?: string;
   studentId?: string;
@@ -82,7 +83,19 @@ export function validateMarksRows(
         rollNumber,
         marks: null,
         status: "invalid",
-        reason: `Missing Marks for ${student.name}`,
+        reason: `Missing Marks for ${student.name}. Enter a number, or "A" if absent.`,
+        studentId: student.id,
+      };
+    }
+
+    const trimmedMark = row.marks.trim().toUpperCase();
+    if (trimmedMark === "A" || trimmedMark === "ABSENT") {
+      return {
+        rowNumber,
+        rollNumber,
+        marks: null,
+        isAbsent: true,
+        status: "valid",
         studentId: student.id,
       };
     }
@@ -94,7 +107,7 @@ export function validateMarksRows(
         rollNumber,
         marks: null,
         status: "invalid",
-        reason: `Marks must be a number ≥ 0 (got "${row.marks}")`,
+        reason: `Marks must be a number ≥ 0, or "A" for absent (got "${row.marks}")`,
         studentId: student.id,
       };
     }
@@ -114,6 +127,7 @@ export function validateMarksRows(
       rowNumber,
       rollNumber,
       marks,
+      isAbsent: false,
       status: "valid",
       studentId: student.id,
     };
