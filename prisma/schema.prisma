@@ -17,18 +17,20 @@ enum Role {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  username     String   @unique
-  passwordHash String
-  role         Role
-  mustChangePassword Boolean @default(true)
-  createdAt    DateTime @default(now())
+  id                  String   @id @default(cuid())
+  username            String   @unique
+  passwordHash        String
+  role                Role
+  mustChangePassword  Boolean  @default(true)
+  createdAt           DateTime @default(now())
 
   student Student?
   teacher Teacher?
   staff   Staff?
 
   markedAttendance Attendance[]
+  
+  createdExams     Exam[]
 }
 
 model AcademicYear {
@@ -41,6 +43,7 @@ model AcademicYear {
   enrollments        Enrollment[]
   teacherAssignments TeacherAssignment[]
   attendance         Attendance[]
+  exams              Exam[]
 }
 
 model SchoolClass {
@@ -61,6 +64,7 @@ model Section {
   enrollments        Enrollment[]
   teacherAssignments TeacherAssignment[]
   attendance         Attendance[]
+  exams              Exam[]
 
   @@unique([schoolClassId, name])
 }
@@ -71,54 +75,57 @@ model Subject {
   code String @unique
 
   teacherAssignments TeacherAssignment[]
+  exams              Exam[]
+  subjectMarks       SubjectMark[]
 }
 
 model Student {
-  id           String   @id @default(cuid())
-  studentCode  String   @unique
-  admissionNumber String @unique
+  id              String   @id @default(cuid())
+  studentCode     String   @unique
+  admissionNumber String   @unique
 
-  firstName    String
-  lastName     String
-  dateOfBirth  DateTime
-  photoUrl     String?
-  gender       String?
+  firstName   String
+  lastName    String
+  dateOfBirth DateTime
+  photoUrl    String?
+  gender      String?
 
-  fatherName   String?
-  fatherPhone  String?
-  motherName   String?
-  motherPhone  String?
-  guardianName String?
-  guardianPhone String?
+  fatherName     String?
+  fatherPhone    String?
+  motherName     String?
+  motherPhone    String?
+  guardianName   String?
+  guardianPhone  String?
 
-  bloodGroup   String?
-  category     String?
-  religion     String?
-  address      String?
-  district     String?
+  bloodGroup String?
+  category   String?
+  religion   String?
+  address    String?
+  district   String?
 
   hostelFacility Boolean @default(false)
   busFacility    Boolean @default(false)
   busNo          String?
   busPoint       String?
 
-  height       Float?
-  weight       Float?
+  height Float?
+  weight Float?
 
-  regNo                 String?
-  fathersQualification  String?
-  fathersOccupation     String?
-  previousSchool        String?
-  remarks               String?
-  apaarId               String?
-  penNo                 String?
-  aadhaarEncrypted      String?
+  regNo                String?
+  fathersQualification String?
+  fathersOccupation    String?
+  previousSchool       String?
+  remarks              String?
+  apaarId              String?
+  penNo                String?
+  aadhaarEncrypted     String?
 
   user   User   @relation(fields: [userId], references: [id])
   userId String @unique
 
   enrollments Enrollment[]
   attendance  Attendance[]
+  subjectMarks SubjectMark[]
 
   createdAt DateTime @default(now())
 }
@@ -191,9 +198,10 @@ model Staff {
   createdAt DateTime @default(now())
 }
 
-// Powers safe, concurrency-proof Student ID generation (e.g. RBS-2026-0001).
-// A single row per year is atomically incremented, so two admins creating
-// students at the same moment can never receive the same number.
+// Powers safe, concurrency-proof Student ID generation
+// (e.g. RBS-2026-0001).
+// A single row per year is atomically incremented, so two admins
+// creating students at the same moment can never receive the same number.
 model IdCounter {
   id    String @id @default(cuid())
   key   String @unique
@@ -230,8 +238,8 @@ model Attendance {
   markedBy   User   @relation(fields: [markedById], references: [id])
   markedById String
 
-  status    AttendanceStatus @default(PRESENT)
-  remarks   String?
+  status   AttendanceStatus @default(PRESENT)
+  remarks  String?
 
   createdAt DateTime @default(now())
 
@@ -245,4 +253,55 @@ enum AttendanceStatus {
   ABSENT
   LATE
   LEAVE
+}
+
+model Exam {
+  id   String   @id @default(cuid())
+  name String
+  type ExamType
+
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  academicYearId String
+
+  section   Section @relation(fields: [sectionId], references: [id])
+  sectionId String
+
+  subject   Subject? @relation(fields: [subjectId], references: [id])
+  subjectId String?
+
+  totalMarks Int?
+
+  createdBy   User   @relation(fields: [createdById], references: [id])
+  createdById String
+
+  createdAt DateTime @default(now())
+
+  marks SubjectMark[]
+}
+
+enum ExamType {
+  UNIT_TEST
+  HALF_YEARLY
+  ANNUAL
+}
+
+model SubjectMark {
+  id String @id @default(cuid())
+
+  exam   Exam   @relation(fields: [examId], references: [id])
+  examId String
+
+  student   Student @relation(fields: [studentId], references: [id])
+  studentId String
+
+  subject   Subject @relation(fields: [subjectId], references: [id])
+  subjectId String
+
+  marksObtained Float?
+  theoryMarks   Float?
+  iaMarks       Float?
+
+  createdAt DateTime @default(now())
+
+  @@unique([examId, studentId, subjectId])
 }

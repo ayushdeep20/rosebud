@@ -13,6 +13,7 @@ const links = [
   { href: "/admin/assignments", label: "Assignments", desc: "Assign teachers to classes and subjects" },
   { href: "/admin/attendance", label: "Attendance", desc: "View attendance reports by class and date" },
   { href: "/admin/credentials", label: "Credentials", desc: "Manage staff portal passwords" },
+  { href: "/admin/exams", label: "Exams", desc: "Create exams and manage report cards" },
 ];
 
 export default function AdminDashboard() {

@@ -45,23 +45,23 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   session: {
     strategy: "jwt",
   },
-  callbacks: {
+    callbacks: {
     jwt: async ({ token, user }) => {
-  if (user) {
-    token.role = user.role;
-    token.mustChangePassword = user.mustChangePassword;
-    token.username = user.username;  // add this line
-  }
-  return token;
-},
-   session: async ({ session, token }) => {
-  if (session.user) {
-    session.user.role = token.role as string;
-    session.user.mustChangePassword = token.mustChangePassword as boolean;
-    session.user.username = token.username as string;  // add this line
-  }
-  return session;
-},
+      if (user) {
+        token.id = user.id;
+        token.role = user.role;
+        token.mustChangePassword = user.mustChangePassword;
+      }
+      return token;
+    },
+    session: async ({ session, token }) => {
+      if (session.user) {
+        session.user.id = token.id as string;
+        session.user.role = token.role as string;
+        session.user.mustChangePassword = token.mustChangePassword as boolean;
+      }
+      return session;
+    },
   },
   pages: {
     signIn: "/login",
