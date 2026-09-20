@@ -27,6 +27,8 @@ model User {
   student Student?
   teacher Teacher?
   staff   Staff?
+
+  markedAttendance Attendance[]
 }
 
 model AcademicYear {
@@ -38,6 +40,7 @@ model AcademicYear {
 
   enrollments        Enrollment[]
   teacherAssignments TeacherAssignment[]
+  attendance         Attendance[]
 }
 
 model SchoolClass {
@@ -57,6 +60,7 @@ model Section {
 
   enrollments        Enrollment[]
   teacherAssignments TeacherAssignment[]
+  attendance         Attendance[]
 
   @@unique([schoolClassId, name])
 }
@@ -114,6 +118,7 @@ model Student {
   userId String @unique
 
   enrollments Enrollment[]
+  attendance  Attendance[]
 
   createdAt DateTime @default(now())
 }
@@ -207,4 +212,37 @@ model AuditLog {
 
   @@index([entityType, entityId])
   @@index([actorUserId])
+}
+
+model Attendance {
+  id        String   @id @default(cuid())
+  date      DateTime @db.Date
+
+  student   Student @relation(fields: [studentId], references: [id])
+  studentId String
+
+  section   Section @relation(fields: [sectionId], references: [id])
+  sectionId String
+
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  academicYearId String
+
+  markedBy   User   @relation(fields: [markedById], references: [id])
+  markedById String
+
+  status    AttendanceStatus @default(PRESENT)
+  remarks   String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([studentId, date, academicYearId])
+  @@index([sectionId, date])
+  @@index([studentId])
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  LEAVE
 }
