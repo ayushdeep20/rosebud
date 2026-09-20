@@ -2,6 +2,7 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 
 export default async function TeacherDashboard() {
   const session = await auth();
@@ -42,6 +43,16 @@ export default async function TeacherDashboard() {
         Welcome, {teacher.firstName} {teacher.lastName}
       </h1>
       <p className="text-gray-500 mb-6">Academic Year: {currentYear}</p>
+
+      <div className="flex flex-wrap gap-4 mb-6">
+        <Link
+          href="/teacher/attendance"
+          className="bg-white rounded-xl shadow-md p-6 w-64 hover:shadow-lg transition-shadow"
+        >
+          <h2 className="text-rose-600 font-medium mb-1">Mark Attendance</h2>
+          <p className="text-gray-500 text-sm">Take today&apos;s attendance</p>
+        </Link>
+      </div>
 
       <div className="bg-white rounded-xl shadow-md p-6 max-w-2xl">
         <h2 className="text-lg font-medium mb-4">Your Assignments</h2>
