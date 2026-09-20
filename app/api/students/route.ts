@@ -19,6 +19,9 @@ export async function POST(request: Request) {
   if (!requireAdmin(session)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const body = await request.json();
   const {
@@ -36,7 +39,7 @@ export async function POST(request: Request) {
   try {
     const result = await createStudent(
       { firstName, lastName, dateOfBirth, admissionNumber, gender, academicYearId, sectionId, rollNumber, aadhaarNumber },
-      session!.user!.id
+      session.user.id
     );
     return NextResponse.json(result, { status: 201 });
   } catch (err: unknown) {

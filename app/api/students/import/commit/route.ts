@@ -18,7 +18,10 @@ export async function POST(request: Request) {
   if (!requireAdmin(session)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-  const actorUserId = session!.user!.id;
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const actorUserId = session.user.id;
 
   const body = await request.json();
   const { academicYearId, rows } = body as { academicYearId: string; rows: CommitRow[] };
