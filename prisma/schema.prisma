@@ -44,6 +44,9 @@ model AcademicYear {
   teacherAssignments TeacherAssignment[]
   attendance         Attendance[]
   exams              Exam[]
+  // Add inside model AcademicYear
+feeDues  FeeDue[]
+payments Payment[]
 }
 
 model SchoolClass {
@@ -126,6 +129,9 @@ model Student {
   enrollments Enrollment[]
   attendance  Attendance[]
   subjectMarks SubjectMark[]
+  // Add inside model Student
+feeDues  FeeDue[]
+payments Payment[]
 
   createdAt DateTime @default(now())
 }
@@ -304,4 +310,68 @@ model SubjectMark {
   createdAt DateTime @default(now())
 
   @@unique([examId, studentId, subjectId])
+}
+
+enum FeeType {
+  TUITION
+  HOSTEL
+  TRANSPORT
+  OTHER
+}
+
+enum FeeStatus {
+  PENDING
+  PARTIAL
+  PAID
+}
+
+enum PaymentMethod {
+  CASH
+  UPI
+  BANK_TRANSFER
+  CHEQUE
+}
+
+model FeeDue {
+  id             String       @id @default(cuid())
+  
+  student        Student      @relation(fields: [studentId], references: [id])
+  studentId      String
+  
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  academicYearId String
+  
+  feeType        FeeType
+  month          Int          // e.g., 1 for Jan, 4 for April
+  year           Int          // e.g., 2026
+  
+  amountDue      Float
+  amountPaid     Float        @default(0)
+  status         FeeStatus    @default(PENDING)
+  dueDate        DateTime?
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  // This ensures we never accidentally generate duplicate fees for the same month/type
+  @@unique([studentId, academicYearId, feeType, month, year])
+  @@index([studentId, status])
+}
+
+model Payment {
+  id             String        @id @default(cuid())
+  
+  student        Student       @relation(fields: [studentId], references: [id])
+  studentId      String
+  
+  academicYear   AcademicYear  @relation(fields: [academicYearId], references: [id])
+  academicYearId String
+  
+  amount         Float
+  paymentDate    DateTime      @default(now())
+  paymentMethod  PaymentMethod @default(CASH)
+  referenceId    String?       // To store UPI Transaction IDs or Cheque numbers
+  remarks        String?
+
+  createdAt      DateTime      @default(now())
 }
