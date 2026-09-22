@@ -27,6 +27,7 @@ export async function POST(request: Request) {
   const {
     firstName, lastName, dateOfBirth, admissionNumber,
     gender, academicYearId, sectionId, rollNumber, aadhaarNumber,
+    hostelFacility, busFacility, busNo, busPoint,
   } = body;
 
   if (!firstName || !lastName || !dateOfBirth || !admissionNumber || !academicYearId || !sectionId) {
@@ -38,7 +39,11 @@ export async function POST(request: Request) {
 
   try {
     const result = await createStudent(
-      { firstName, lastName, dateOfBirth, admissionNumber, gender, academicYearId, sectionId, rollNumber, aadhaarNumber },
+      {
+        firstName, lastName, dateOfBirth, admissionNumber, gender,
+        academicYearId, sectionId, rollNumber, aadhaarNumber,
+        hostelFacility, busFacility, busNo, busPoint,
+      },
       session.user.id
     );
     return NextResponse.json(result, { status: 201 });

@@ -16,6 +16,12 @@ export type NewStudentInput = {
   sectionId: string;
   rollNumber?: string | number | null;
   aadhaarNumber?: string | null;
+  // Boarding & transport, set at admission time. Both default to false
+  // (day scholar, no bus) when omitted.
+  hostelFacility?: boolean;
+  busFacility?: boolean;
+  busNo?: string | null;
+  busPoint?: string | null;
 };
 
 export type CreatedStudent = {
@@ -47,6 +53,11 @@ export async function createStudentInTx(
     },
   });
 
+  const isBoarder = input.hostelFacility === true;
+  // A boarder never travels by the school bus (there is no boarder
+  // transport fee on the rate card), regardless of what was ticked.
+  const usesBus = !isBoarder && input.busFacility === true;
+
   const student = await tx.student.create({
     data: {
       studentCode,
@@ -56,6 +67,10 @@ export async function createStudentInTx(
       dateOfBirth: new Date(input.dateOfBirth),
       gender: input.gender || null,
       aadhaarEncrypted: input.aadhaarNumber ? encryptValue(input.aadhaarNumber) : null,
+      hostelFacility: isBoarder,
+      busFacility: usesBus,
+      busNo: usesBus ? input.busNo || null : null,
+      busPoint: usesBus ? input.busPoint || null : null,
       userId: user.id,
     },
   });
@@ -91,7 +106,12 @@ export async function createStudent(
       action: "STUDENT_CREATE",
       entityType: "Student",
       entityId: result.studentId,
-      after: { studentCode: result.studentCode, admissionNumber: input.admissionNumber },
+      after: {
+        studentCode: result.studentCode,
+        admissionNumber: input.admissionNumber,
+        hostelFacility: input.hostelFacility === true,
+        busFacility: input.hostelFacility !== true && input.busFacility === true,
+      },
     });
     return result;
   });
@@ -111,4 +131,76 @@ export async function listStudents() {
     },
     orderBy: { studentCode: "asc" },
   });
+}
+
+export type BoardingTransportUpdate = {
+  hostelFacility?: boolean;
+  busFacility?: boolean;
+  busNo?: string | null;
+  busPoint?: string | null;
+};
+
+// Updates a student's boarding / transport status. This is the one
+// place these flags change after admission, so a student moving in or
+// out of the hostel, or starting or stopping the bus, is always
+// recorded here with an audit trail of who changed what and when.
+//
+// Fee amounts already generated for past or already-billed months are
+// never rewritten by this — see the note in app/api/fees/generate.
+// Only fees generated AFTER this change will reflect the new status.
+export async function updateBoardingTransport(
+  studentId: string,
+  update: BoardingTransportUpdate,
+  actorUserId: string
+) {
+  const student = await prisma.student.findUnique({ where: { id: studentId } });
+  if (!student) {
+    throw new Error("Student not found");
+  }
+
+  const nextHostel = update.hostelFacility ?? student.hostelFacility;
+  // A boarder never pays transport separately - mess covers meals, and
+  // there's no boarder bus rate on the fee sheet.
+  const nextBus = nextHostel ? false : update.busFacility ?? student.busFacility;
+  const nextBusNo = nextBus ? update.busNo ?? student.busNo : null;
+  const nextBusPoint = nextBus ? update.busPoint ?? student.busPoint : null;
+
+  const before = {
+    hostelFacility: student.hostelFacility,
+    busFacility: student.busFacility,
+    busNo: student.busNo,
+    busPoint: student.busPoint,
+  };
+  const after = {
+    hostelFacility: nextHostel,
+    busFacility: nextBus,
+    busNo: nextBusNo,
+    busPoint: nextBusPoint,
+  };
+
+  const unchanged =
+    before.hostelFacility === after.hostelFacility &&
+    before.busFacility === after.busFacility &&
+    before.busNo === after.busNo &&
+    before.busPoint === after.busPoint;
+
+  if (unchanged) {
+    return { student, changed: false };
+  }
+
+  const [updated] = await prisma.$transaction([
+    prisma.student.update({ where: { id: studentId }, data: after }),
+    prisma.auditLog.create({
+      data: {
+        actorUserId,
+        action: "STUDENT_BOARDING_TRANSPORT_UPDATE",
+        entityType: "Student",
+        entityId: studentId,
+        beforeJson: JSON.stringify(before),
+        afterJson: JSON.stringify(after),
+      },
+    }),
+  ]);
+
+  return { student: updated, changed: true };
 }

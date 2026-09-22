@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 
 type FeeDue = {
   id: string;
-  feeType: "ADMISSION" | "ANNUAL" | "TUITION" | "TRANSPORT" | "MESS" | "PREVIOUS_DUES" | "OTHER";
+  feeType: "ADMISSION" | "ANNUAL" | "TUITION" | "TRANSPORT" | "HOSTEL" | "PREVIOUS_DUES" | "OTHER";
   month: number;
   year: number;
   description: string;
@@ -37,7 +37,7 @@ const FEE_TYPE_LABELS: Record<FeeDue["feeType"], string> = {
   ANNUAL: "Annual Fee",
   TUITION: "Tuition",
   TRANSPORT: "Transport",
-  MESS: "Mess (Hostel)",
+  HOSTEL: "Mess (Hostel)",
   PREVIOUS_DUES: "Previous Dues",
   OTHER: "Other",
 };
@@ -64,9 +64,14 @@ export default function StudentFeePortalPage() {
     void fetchStatement();
   }, []);
 
-  const getMonthName = (monthNum: number) => {
+  // month 0 is a placeholder used only for pre-portal "Previous Dues"
+  // balances - it has no real calendar month, so it's shown as
+  // "Opening Balance" rather than run through Date() (which would
+  // otherwise wrap around to the previous December).
+  const getMonthYearLabel = (monthNum: number, year: number) => {
+    if (monthNum === 0) return "Opening Balance";
     const date = new Date(2026, monthNum - 1, 1);
-    return date.toLocaleString("default", { month: "long" });
+    return `${date.toLocaleString("default", { month: "long" })} ${year}`;
   };
 
   if (loading) return <div className="p-8 text-center text-gray-500">Loading your fee ledger...</div>;
@@ -118,12 +123,14 @@ export default function StudentFeePortalPage() {
                 return (
                   <tr key={due.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 font-medium text-gray-900">
-                      {getMonthName(due.month)} {due.year}
+                      {getMonthYearLabel(due.month, due.year)}
                     </td>
                     <td className="px-6 py-4">
                       <span className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
                         {FEE_TYPE_LABELS[due.feeType]}
-                        {due.feeType === "OTHER" && due.description ? ` — ${due.description}` : ""}
+                        {(due.feeType === "OTHER" || due.feeType === "PREVIOUS_DUES") && due.description
+                          ? ` — ${due.description}`
+                          : ""}
                       </span>
                     </td>
                     <td className="px-6 py-4">₹{due.amountDue}</td>

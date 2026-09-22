@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 
+import Link from "next/link";
+
 type AcademicYear = {
   id: string;
   label: string;
@@ -114,7 +116,15 @@ export default function AdminFeesDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
-      <h1 className="mb-6 text-2xl font-semibold text-gray-800">Fee Collection</h1>
+            <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-gray-800">Fee Collection</h1>
+        <Link
+          href="/admin/fees/generate"
+          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+        >
+          Generate Fees
+        </Link>
+      </div>
 
       <div className="mb-8 flex flex-wrap items-end gap-4 rounded-xl bg-white p-6 shadow-sm">
         <div>
