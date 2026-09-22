@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await auth();
@@ -12,7 +12,7 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
-    const { id } = params;
+    const { id } = await params;
 
     const student = await prisma.student.findUnique({
       where: { id },
@@ -58,7 +58,7 @@ export async function GET(
 
 export async function PATCH(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await auth();
@@ -66,18 +66,15 @@ export async function PATCH(
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
-    const { id } = params;
+    const { id } = await params;
     const body = await req.json();
 
-    // Separate enrollment-specific updates from student model fields
     const { rollNumber, sectionId, ...studentFields } = body;
 
-    // Convert date string to DateTime if provided
     if (studentFields.dateOfBirth) {
       studentFields.dateOfBirth = new Date(studentFields.dateOfBirth);
     }
 
-    // Convert float fields if provided
     if (studentFields.height !== undefined) {
       studentFields.height = studentFields.height ? parseFloat(studentFields.height) : null;
     }
@@ -85,14 +82,19 @@ export async function PATCH(
       studentFields.weight = studentFields.weight ? parseFloat(studentFields.weight) : null;
     }
 
-    // Update main student record
+    // Omit relational non-schema fields before updating Prisma
+    delete studentFields.user;
+    delete studentFields.enrollments;
+    delete studentFields.className;
+    delete studentFields.sectionName;
+    delete studentFields.academicYearLabel;
+
     const updatedStudent = await prisma.student.update({
       where: { id },
       data: studentFields,
     });
 
-    // Update active enrollment if section or roll number modified
-    if (rollNumber !== undefined || sectionId) {
+    if (rollNumber !== undefined) {
       const latestEnrollment = await prisma.enrollment.findFirst({
         where: { studentId: id },
         orderBy: { id: "desc" },
@@ -102,7 +104,7 @@ export async function PATCH(
         await prisma.enrollment.update({
           where: { id: latestEnrollment.id },
           data: {
-            ...(rollNumber !== undefined && { rollNumber: rollNumber ? parseInt(rollNumber) : null }),
+            rollNumber: rollNumber ? parseInt(rollNumber) : null,
             ...(sectionId && { sectionId }),
           },
         });

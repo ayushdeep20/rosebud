@@ -1,101 +1,198 @@
 // app/admin/page.tsx
-
 import Link from "next/link";
+import { prisma } from "@/lib/prisma";
+import {
+  GraduationCap,
+  Receipt,
+  ArrowUpRight,
+  ShieldCheck,
+  AlertCircle,
+  IndianRupee,
+  BookOpen,
+  KeyRound,
+  Calendar,
+} from "lucide-react";
 
-const links = [
-  {
-    href: "/admin/academic-years",
-    label: "Academic Years",
-    desc: "Manage school years",
-  },
-  {
-    href: "/admin/subjects",
-    label: "Subjects",
-    desc: "Manage subjects",
-  },
-  {
-    href: "/admin/classes",
-    label: "Classes",
-    desc: "Manage classes",
-  },
-  {
-    href: "/admin/sections",
-    label: "Sections",
-    desc: "Manage class sections",
-  },
-  {
-    href: "/admin/students",
-    label: "Students",
-    desc: "Manage student records",
-  },
-  {
-    href: "/admin/students/import",
-    label: "Bulk Import",
-    desc: "Import students from Excel",
-  },
-  {
-    href: "/admin/students/reset-passwords",
-    label: "Reset Passwords",
-    desc: "Recover student credentials",
-  },
-  {
-    href: "/admin/staff",
-    label: "Staff",
-    desc: "Manage teachers and staff",
-  },
-  {
-    href: "/admin/assignments",
-    label: "Assignments",
-    desc: "Assign teachers to classes and subjects",
-  },
-  {
-    href: "/admin/credentials",
-    label: "Credentials",
-    desc: "Manage staff portal passwords",
-  },
-  {
-    href: "/admin/attendance",
-    label: "Attendance",
-    desc: "View attendance reports by class and date",
-  },
-  {
-    href: "/admin/exams",
-    label: "Exams",
-    desc: "Create exams and manage report cards",
-  },
-  {
-    href: "/admin/promotions",
-    label: "Promote Students",
-    desc: "Move students to the next academic year",
-  },
-  {
-    href: "/admin/fees",
-    label: "Fee Management",
-    desc: "Track monthly dues, hostel fees, and record payments",
-  },
-];
+async function getAdminMetrics() {
+  try {
+    const [totalStudents, totalSections, defaultersCount] =
+      await Promise.all([
+        prisma.student.count().catch(() => 0),
+        prisma.section.count().catch(() => 0),
+        prisma.feeDue.count({ where: { status: "PENDING" } }).catch(() => 0),
+      ]);
 
-export default function AdminDashboard() {
+    const activeYear = await prisma.academicYear
+      .findFirst({
+        where: { isCurrent: true },
+        orderBy: { startDate: "desc" },
+      })
+      .catch(() => null);
+
+    const revenue = await prisma.payment
+      .aggregate({ _sum: { amount: true } })
+      .catch(() => ({ _sum: { amount: 0 } }));
+
+    const pendingDuesSum = await prisma.feeDue
+      .aggregate({
+        _sum: { amountDue: true },
+        where: { status: "PENDING" },
+      })
+      .catch(() => ({ _sum: { amountDue: 0 } }));
+
+    return {
+      totalStudents,
+      activeSections: totalSections,
+      activeAcademicYear: activeYear?.label || "2026-2027",
+      defaultersCount,
+      pendingDuesAmount: pendingDuesSum._sum?.amountDue ?? 0,
+      totalCollected: revenue._sum?.amount ?? 0,
+    };
+  } catch (error) {
+    return {
+      totalStudents: 0,
+      activeSections: 0,
+      activeAcademicYear: "N/A",
+      defaultersCount: 0,
+      pendingDuesAmount: 0,
+      totalCollected: 0,
+    };
+  }
+}
+
+export default async function AdminDashboardPage() {
+  const metrics = await getAdminMetrics();
+
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <h1 className="text-2xl font-semibold mb-6">
-        Admin Dashboard
-      </h1>
+    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6 lg:p-8 space-y-8 font-sans">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800 pb-6">
+        <div>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/admin/academic-years"
+              className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/20 transition-colors"
+            >
+              <Calendar className="w-3 h-3" />
+              Academic Session: {metrics.activeAcademicYear} (Click to Change)
+            </Link>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white mt-2">
+            Executive Command Center
+          </h1>
+          <p className="text-slate-400 text-sm">
+            Managing {metrics.totalStudents.toLocaleString("en-IN")} total students across {metrics.activeSections} sections.
+          </p>
+        </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl">
-        {links.map((link) => (
+        <Link
+          href="/admin/credentials"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-semibold transition-all shadow-lg shadow-indigo-600/20"
+        >
+          <KeyRound className="w-4 h-4" />
+          Credentials & Password Center
+        </Link>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <MetricCard
+          title="Total Students"
+          value={metrics.totalStudents.toLocaleString("en-IN")}
+          subtitle={`Across ${metrics.activeSections} sections`}
+          icon={<GraduationCap className="w-5 h-5 text-indigo-400" />}
+        />
+        <MetricCard
+          title="Revenue Collected"
+          value={`₹${metrics.totalCollected.toLocaleString("en-IN")}`}
+          subtitle="Total verified payments"
+          icon={<IndianRupee className="w-5 h-5 text-emerald-400" />}
+        />
+        <MetricCard
+          title="Pending Dues Total"
+          value={`₹${metrics.pendingDuesAmount.toLocaleString("en-IN")}`}
+          subtitle={`${metrics.defaultersCount} students with pending balance`}
+          icon={<AlertCircle className="w-5 h-5 text-amber-400" />}
+          href="/admin/fees/dues"
+        />
+        <MetricCard
+          title="Active Session"
+          value={metrics.activeAcademicYear}
+          subtitle="Current operational year"
+          icon={<ShieldCheck className="w-5 h-5 text-blue-400" />}
+          href="/admin/academic-years"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <ModuleCard
+          title="Academics"
+          description="Manage classes, sections, and credentials."
+          icon={<BookOpen className="w-5 h-5 text-indigo-400" />}
+          links={[
+            { label: "Credentials & Passwords", href: "/admin/credentials", highlight: true },
+            { label: "Student Directory", href: "/admin/students" },
+            { label: "Academic Years", href: "/admin/academic-years" },
+            { label: "Classes & Sections", href: "/admin/sections" },
+          ]}
+        />
+        <ModuleCard
+          title="Finance"
+          description="Track dues, collections, and structures."
+          icon={<Receipt className="w-5 h-5 text-emerald-400" />}
+          links={[
+            { label: "Outstanding Dues Breakdown", href: "/admin/fees/dues" },
+            { label: "Fee Structures", href: "/admin/fees" },
+          ]}
+        />
+        <ModuleCard
+          title="System & Access"
+          description="Staff directory, audit trails, and security."
+          icon={<ShieldCheck className="w-5 h-5 text-purple-400" />}
+          links={[
+            { label: "Staff Directory & Roles", href: "/admin/staff" },
+            { label: "System Audit Logs", href: "/admin/audit-logs" },
+          ]}
+        />
+      </div>
+    </div>
+  );
+}
+
+function MetricCard({ title, value, subtitle, icon, href }: any) {
+  const cardContent = (
+    <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 space-y-2 hover:border-slate-700 transition-all cursor-pointer">
+      <div className="flex items-center justify-between text-slate-400">
+        <span className="text-xs font-semibold uppercase tracking-wider">{title}</span>
+        <div className="p-2 bg-slate-800 rounded-lg">{icon}</div>
+      </div>
+      <div className="text-2xl font-black text-white">{value}</div>
+      <div className="text-xs text-slate-400">{subtitle}</div>
+    </div>
+  );
+
+  return href ? <Link href={href}>{cardContent}</Link> : cardContent;
+}
+
+function ModuleCard({ title, description, icon, links }: any) {
+  return (
+    <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-6 space-y-4">
+      <div className="flex items-center gap-2.5 font-bold text-white text-base">
+        <div className="p-2 bg-slate-800 rounded-lg">{icon}</div>
+        {title}
+      </div>
+      <p className="text-xs text-slate-400">{description}</p>
+      <div className="space-y-1.5 pt-2 border-t border-slate-800">
+        {links.map((link: any, idx: number) => (
           <Link
-            key={link.href}
+            key={idx}
             href={link.href}
-            className="bg-white rounded-xl shadow-md p-5 hover:shadow-lg transition block"
+            className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+              link.highlight
+                ? "bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 hover:bg-indigo-500/20"
+                : "text-slate-300 hover:bg-slate-800 hover:text-white"
+            }`}
           >
-            <h2 className="font-medium text-rose-600">
-              {link.label}
-            </h2>
-
-            <p className="text-sm text-gray-500 mt-1">
-              {link.desc}
-            </p>
+            {link.label}
+            <ArrowUpRight className="w-3.5 h-3.5 text-slate-500" />
           </Link>
         ))}
       </div>

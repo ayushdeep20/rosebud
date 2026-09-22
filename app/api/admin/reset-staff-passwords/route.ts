@@ -1,4 +1,3 @@
-// app/api/admin/reset-staff-passwords/route.ts
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
@@ -45,7 +44,7 @@ export async function POST() {
     results.push({
       staffCode: staff.staffCode,
       name: `${staff.firstName} ${staff.lastName}`,
-      username: staff.user.username,
+      username: staff.user.username, // Uses username instead of email
       tempPassword,
     });
   }

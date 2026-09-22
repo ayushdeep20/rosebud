@@ -1,116 +1,79 @@
+// app/api/payments/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { requireAdmin } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
+import { processPaymentAllocation } from "../../../lib/fees.server";
+import { PaymentMethod } from "@prisma/client";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
+
   if (!requireAdmin(session)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return NextResponse.json({ error: "Forbidden: Admin access required" }, { status: 403 });
   }
+
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    const { studentId, academicYearId, amount, paymentMethod, referenceId, remarks } = await req.json();
+    const body = await req.json();
+    const { studentId, academicYearId, amount, paymentMethod, referenceId, remarks } = body;
 
-    if (!studentId || !academicYearId || !amount || amount <= 0) {
-      return NextResponse.json({ error: "Invalid payment details provided." }, { status: 400 });
+    const parsedAmount = Number(amount);
+    if (!studentId || !academicYearId || isNaN(parsedAmount) || parsedAmount <= 0) {
+      return NextResponse.json(
+        { error: "Invalid payment details provided. studentId, academicYearId, and positive amount are required." },
+        { status: 400 }
+      );
     }
 
-    let remainingAmount = amount;
+    // Cast or fallback to PaymentMethod enum
+    const methodEnum = (paymentMethod && Object.values(PaymentMethod).includes(paymentMethod as PaymentMethod))
+      ? (paymentMethod as PaymentMethod)
+      : PaymentMethod.CASH;
 
-    // 1. Fetch all unpaid dues chronologically (oldest month first)
-    const unpaidDues = await prisma.feeDue.findMany({
-      where: {
-        studentId,
-        academicYearId,
-        status: { not: "PAID" },
-      },
-      orderBy: [
-        { year: "asc" },
-        { month: "asc" },
-      ],
-    });
+    // 1. Process payment creation and FIFO allocation
+    const allocationResult = await processPaymentAllocation(
+      studentId,
+      academicYearId,
+      parsedAmount,
+      methodEnum,
+      referenceId,
+      remarks
+    );
 
-    const clearedBreakdown: { feeType: string; month: number; year: number; amount: number }[] = [];
-
-    const transactionOperations = [];
-
-    // 2. Create the master Payment record (your receipt)
-    const payment = prisma.payment.create({
-      data: {
-        studentId,
-        academicYearId,
-        amount,
-        paymentMethod: paymentMethod || "CASH",
-        referenceId,
-        remarks,
-      },
-    });
-    transactionOperations.push(payment);
-
-    // 3. The FIFO Cascade Logic
-    for (const due of unpaidDues) {
-      if (remainingAmount <= 0) break;
-
-      const balanceForThisDue = due.amountDue - due.amountPaid;
-      const appliedToThisDue = Math.min(remainingAmount, balanceForThisDue);
-      clearedBreakdown.push({
-        feeType: due.feeType,
-        month: due.month,
-        year: due.year,
-        amount: appliedToThisDue,
-      });
-
-      if (remainingAmount >= balanceForThisDue) {
-        // The payment completely clears this specific month
-        remainingAmount -= balanceForThisDue;
-        transactionOperations.push(
-          prisma.feeDue.update({
-            where: { id: due.id },
-            data: {
-              amountPaid: due.amountDue,
-              status: "PAID",
-            },
-          })
-        );
-      } else {
-        // The payment only partially clears this month, emptying the remaining cash
-        transactionOperations.push(
-          prisma.feeDue.update({
-            where: { id: due.id },
-            data: {
-              amountPaid: due.amountPaid + remainingAmount,
-              status: "PARTIAL",
-            },
-          })
-        );
-        remainingAmount = 0;
-      }
-    }
-
-    // 4. Execute all database writes simultaneously
-    const [createdPayment] = await prisma.$transaction(transactionOperations);
-
+    // 2. Record Audit Log
     await recordAudit(prisma, {
       actorUserId: session.user.id,
       action: "PAYMENT_COLLECT",
       entityType: "Payment",
-      entityId: createdPayment.id,
-      after: { studentId, academicYearId, amount, paymentMethod: paymentMethod || "CASH", clearedBreakdown },
+      entityId: allocationResult.paymentId,
+      after: {
+        studentId,
+        academicYearId,
+        amountPaid: parsedAmount,
+        paymentMethod: methodEnum,
+        allocations: allocationResult.allocations,
+        creditAdded: allocationResult.creditAdded,
+      },
     });
 
     return NextResponse.json({
       success: true,
-      message: "Payment processed successfully.",
-      clearedBreakdown,
-      unallocated: remainingAmount, // >0 if the amount paid more than everything currently due
+      message: "Payment processed and allocated successfully.",
+      paymentId: allocationResult.paymentId,
+      allocatedAmount: allocationResult.allocatedAmount,
+      unallocatedCredit: allocationResult.creditAdded,
+      clearedBreakdown: allocationResult.allocations,
     });
   } catch (error) {
-    console.error("Payment error:", error);
-    return NextResponse.json({ error: "Internal server error while processing payment." }, { status: 500 });
+    console.error("Payment API Route Error:", error);
+    return NextResponse.json(
+      { error: "Internal server error while processing payment." },
+      { status: 500 }
+    );
   }
 }

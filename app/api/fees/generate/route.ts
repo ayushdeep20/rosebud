@@ -1,15 +1,3 @@
-// app/api/fees/generate/route.ts
-// Creates month-wise fee dues for students, using the rate card
-// (FeeStructure) for the academic year. Safe to run repeatedly:
-// a fee that already exists is never duplicated or changed.
-//
-// POST body:
-//   academicYearId  (required)
-//   classId         (optional - omit or null for all classes)
-//   months          [{ month: 9, year: 2026 }, ...]   monthly fees to create
-//   includeOneTime  true = also create Annual (and Admission for new admissions)
-//   dryRun          true = only report what WOULD be created
-
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { requireAdmin } from "@/lib/permissions";
@@ -53,9 +41,21 @@ type ClassStats = {
 
 const CHUNK_SIZE = 1000;
 
+function isValidYearMonth(ym: unknown): ym is YearMonth {
+  if (typeof ym !== "object" || ym === null) return false;
+  const candidate = ym as Record<string, unknown>;
+  return (
+    typeof candidate.month === "number" &&
+    candidate.month >= 1 &&
+    candidate.month <= 12 &&
+    typeof candidate.year === "number" &&
+    candidate.year > 1900
+  );
+}
+
 export async function POST(req: NextRequest) {
   const session = await auth();
-  if (!requireAdmin(session)) {
+  if (!session?.user?.id || !requireAdmin(session)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -63,16 +63,16 @@ export async function POST(req: NextRequest) {
   try {
     body = (await req.json()) as Body;
   } catch {
-    return NextResponse.json({ error: "Invalid request." }, { status: 400 });
+    return NextResponse.json({ error: "Invalid JSON request." }, { status: 400 });
   }
 
   const academicYearId = body.academicYearId;
   const classId = body.classId || null;
   const includeOneTime = body.includeOneTime === true;
-  const dryRun = body.dryRun !== false; // anything except an explicit false is a preview
+  const dryRun = body.dryRun !== false;
 
-  if (!academicYearId) {
-    return NextResponse.json({ error: "Please choose an academic year." }, { status: 400 });
+  if (!academicYearId || typeof academicYearId !== "string") {
+    return NextResponse.json({ error: "Please choose a valid academic year." }, { status: 400 });
   }
 
   const academicYear = await prisma.academicYear.findUnique({ where: { id: academicYearId } });
@@ -80,13 +80,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Academic year not found." }, { status: 404 });
   }
 
-  // Only months inside the academic year are allowed.
+  // Validate and parse selected months
+  const rawMonths = Array.isArray(body.months) ? body.months : [];
+  for (const m of rawMonths) {
+    if (!isValidYearMonth(m)) {
+      return NextResponse.json(
+        { error: "Invalid month specification provided." },
+        { status: 400 }
+      );
+    }
+  }
+
   const allowedMonths = monthsInRange(academicYear.startDate, academicYear.endDate);
   const allowedKeys = new Set(allowedMonths.map(monthKey));
 
   const selectedMonths: YearMonth[] = [];
   const seenMonths = new Set<string>();
-  for (const m of body.months ?? []) {
+  for (const m of rawMonths) {
     const key = monthKey(m);
     if (!allowedKeys.has(key)) {
       return NextResponse.json(
@@ -107,26 +117,32 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // The rate card for this year.
-  const rateRows = await prisma.feeStructure.findMany({ where: { academicYearId } });
+  // Fetch rate structure
+  const rateRows = await prisma.feeStructure.findMany({
+    where: { academicYearId },
+    select: { schoolClassId: true, isBoarder: true, feeType: true, amount: true },
+  });
+
   if (rateRows.length === 0) {
     return NextResponse.json(
       { error: `No fee rates are set up for ${academicYear.label} yet.` },
       { status: 400 }
     );
   }
+
   const rates = new Map<string, number>();
   for (const r of rateRows) {
     rates.set(`${r.schoolClassId}|${r.isBoarder}|${r.feeType}`, r.amount);
   }
 
-  // Students enrolled in this year (optionally one class only).
+  // Fetch target student enrollments
   const enrollments = await prisma.enrollment.findMany({
     where: {
       academicYearId,
       ...(classId ? { section: { schoolClassId: classId } } : {}),
     },
-    include: {
+    select: {
+      isNewAdmission: true,
       student: { select: { id: true, hostelFacility: true, busFacility: true } },
       section: { select: { schoolClass: { select: { id: true, name: true, order: true } } } },
     },
@@ -139,11 +155,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Work out every fee line each student should have.
   const lines: Line[] = [];
-  const studentClass = new Map<string, string>(); // studentId -> classId
+  const studentClass = new Map<string, string>();
   const classStats = new Map<string, ClassStats>();
-  const missingRates = new Map<string, Set<string>>(); // message -> studentIds
+  const missingRates = new Map<string, Set<string>>();
   let boardersWithBus = 0;
   const oneTimeMonth = firstMonthOfYear(academicYear.startDate);
 
@@ -177,7 +192,6 @@ export async function POST(req: NextRequest) {
     stats.students += 1;
     if (isBoarder) stats.boarders += 1;
 
-    // Boarders do not pay transport (there is no boarder transport rate).
     const paysTransport = student.busFacility && !isBoarder;
     if (paysTransport) stats.busUsers += 1;
     if (student.busFacility && isBoarder) boardersWithBus += 1;
@@ -203,12 +217,12 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Skip anything that already exists.
   const studentIds = Array.from(studentClass.keys());
   const existingRows = await prisma.feeDue.findMany({
     where: { academicYearId, studentId: { in: studentIds } },
     select: { studentId: true, feeType: true, month: true, year: true },
   });
+
   const existing = new Set(
     existingRows.map((r) => `${r.studentId}|${r.feeType}|${r.month}|${r.year}`)
   );
@@ -218,7 +232,6 @@ export async function POST(req: NextRequest) {
   );
   const alreadyExist = lines.length - toCreate.length;
 
-  // Summaries for the preview.
   const byTypeMap = new Map<FeeTypeName, { lines: number; amount: number }>();
   let amountToCreate = 0;
   for (const l of toCreate) {
@@ -278,50 +291,49 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(summary);
   }
 
-  // Really create the fees (in batches; duplicates are skipped by the database).
   let created = 0;
   try {
-    for (let i = 0; i < toCreate.length; i += CHUNK_SIZE) {
-      const chunk = toCreate.slice(i, i + CHUNK_SIZE);
-      const result = await prisma.feeDue.createMany({
-        data: chunk.map((l) => ({
-          studentId: l.studentId,
-          academicYearId,
-          feeType: l.feeType,
-          month: l.month,
-          year: l.year,
-          amountDue: l.amountDue,
-        })),
-        skipDuplicates: true,
+    await prisma.$transaction(async (tx) => {
+      for (let i = 0; i < toCreate.length; i += CHUNK_SIZE) {
+        const chunk = toCreate.slice(i, i + CHUNK_SIZE);
+        const result = await tx.feeDue.createMany({
+          data: chunk.map((l) => ({
+            studentId: l.studentId,
+            academicYearId,
+            feeType: l.feeType,
+            month: l.month,
+            year: l.year,
+            amountDue: l.amountDue,
+          })),
+          skipDuplicates: true,
+        });
+        created += result.count;
+      }
+
+      await recordAudit(tx, {
+        actorUserId: session.user.id,
+        action: "FEES_GENERATE",
+        entityType: "AcademicYear",
+        entityId: academicYearId,
+        after: {
+          classId,
+          months: summary.monthsSelected,
+          includeOneTime,
+          created,
+          skippedExisting: alreadyExist,
+        },
       });
-      created += result.count;
-    }
+    });
   } catch (error) {
     console.error("Fee generation error:", error);
     return NextResponse.json(
       {
         error:
-          "Something went wrong while creating fees. Nothing is duplicated - you can safely run it again.",
+          "Something went wrong while creating fees. Nothing was duplicated - you can safely run it again.",
       },
       { status: 500 }
     );
   }
-
-  await prisma.$transaction(async (tx) => {
-    await recordAudit(tx, {
-      actorUserId: session!.user.id,
-      action: "FEES_GENERATE",
-      entityType: "AcademicYear",
-      entityId: academicYearId,
-      after: {
-        classId,
-        months: summary.monthsSelected,
-        includeOneTime,
-        created,
-        skippedExisting: alreadyExist,
-      },
-    });
-  });
 
   return NextResponse.json({ ...summary, created });
 }
